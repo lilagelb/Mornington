@@ -465,24 +465,6 @@ impl<'a> Parser<'a> {
         Ok(token)
     }
 
-    /// checks that the next token is the required one, but doesn't consume it like `eat_token()`
-    fn taste_token(&mut self, kind: TokenKind) -> Result<(), Error> {
-        let token = match self.peek() {
-            Some(token) => token,
-            None => return Err(Error::new(
-                UnexpectedEOF,
-                self.previous_token.unwrap().position.one_past(),
-            )),
-        };
-        if token.kind != kind {
-            return Err(Error::new(
-                UnexpectedToken(token.kind),
-                token.position,
-            ));
-        }
-        Ok(())
-    }
-
     /// Throws an error if wrapper imbalance is invalidated, otherwise does nothing
     fn check_wrapper_balance(&mut self, opener: String) -> Result<(), Error> {
         let token = self.current_token.unwrap();

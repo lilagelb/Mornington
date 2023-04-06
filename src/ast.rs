@@ -1,19 +1,21 @@
-mod builtins;
-
+use std::fmt::{Debug, Formatter};
+use std::ops::Deref;
 use crate::error::Error;
 use crate::error::ErrorKind::{Break, Continue, Return};
 use crate::lexer::{Position, Token, TokenKind};
 use crate::runtime::Runtime;
 use crate::value::Value;
 
+// TODO: implement PartialEq for all node types to allow full test coverage
 
-pub trait Evaluable {
+
+pub trait Evaluable: Debug {
     fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error>;
 }
+
 pub type Expression = Box<dyn Evaluable>;
 
-
-pub trait Executable {
+pub trait Executable: Debug {
     fn execute(&self, runtime: &mut Runtime) -> Result<(), Error>;
 }
 type Statement = Box<dyn Executable>;
@@ -35,6 +37,7 @@ impl Evaluable for ConstantNode {
 }
 
 
+#[derive(Debug)]
 pub struct ListNode {
     list: Vec<Expression>,
 }
@@ -54,6 +57,7 @@ impl Evaluable for ListNode {
 }
 
 
+#[derive(Debug)]
 pub struct OperatorNode {
     lhs: Expression,
     rhs: Expression,
@@ -64,6 +68,7 @@ impl OperatorNode {
         OperatorNode { lhs, rhs, operator }
     }
 }
+
 impl Evaluable for OperatorNode {
     fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error> {
         let lhs = self.lhs.evaluate(runtime)?;
@@ -88,6 +93,7 @@ impl Evaluable for OperatorNode {
     }
 }
 
+#[derive(Debug)]
 pub enum Operator {
     Add, Sub, Mul, Div, Mod,
     Seq, Sne, Eq, Ne, Gt, Lt, Ge, Le,
@@ -123,6 +129,7 @@ impl Operator {
 }
 
 
+#[derive(Debug)]
 pub struct VariableNode {
     name: String,
 }
@@ -131,6 +138,7 @@ impl VariableNode {
         VariableNode { name }
     }
 }
+
 impl Evaluable for VariableNode {
     fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error> {
         match runtime.get_variable(&self.name) {
@@ -141,6 +149,7 @@ impl Evaluable for VariableNode {
 }
 
 
+#[derive(Debug)]
 pub struct FunctionCallNode {
     name: String,
     args: ListNode,
@@ -150,6 +159,7 @@ impl FunctionCallNode {
         FunctionCallNode { name, args }
     }
 }
+
 impl Evaluable for FunctionCallNode {
     fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error> {
         // TODO: this is a TEMPORARY HACK to get some output working for some basic testing
@@ -168,6 +178,8 @@ impl Executable for FunctionCallNode {
     }
 }
 
+
+#[derive(Debug)]
 pub struct Block {
     statements: Vec<Statement>,
 }
@@ -187,6 +199,7 @@ impl Block {
         Ok(())
     }
 }
+
 impl Executable for Block {
     fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         for statement in &self.statements {
@@ -196,7 +209,7 @@ impl Executable for Block {
     }
 }
 
-
+#[derive(Debug)]
 pub struct AssignNode {
     target: String,
     expression: Expression,
@@ -206,6 +219,7 @@ impl AssignNode {
         AssignNode { target, expression }
     }
 }
+
 impl Executable for AssignNode {
     fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         runtime.set_variable(&self.target, self.expression.evaluate(runtime)?);
@@ -214,6 +228,7 @@ impl Executable for AssignNode {
 }
 
 
+#[derive(Debug)]
 pub struct ConditionalNode {
     conditional_paths: Vec<ConditionalPath>,
     else_block: Option<Block>,
@@ -223,6 +238,7 @@ impl ConditionalNode {
         ConditionalNode { conditional_paths, else_block }
     }
 }
+
 impl Executable for ConditionalNode {
     fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         for ConditionalPath { condition, block: path } in &self.conditional_paths {
@@ -237,6 +253,8 @@ impl Executable for ConditionalNode {
         Ok(())
     }
 }
+
+#[derive(Debug)]
 pub struct ConditionalPath {
     condition: Expression,
     block: Block,
@@ -248,6 +266,7 @@ impl ConditionalPath {
 }
 
 
+#[derive(Debug)]
 pub struct WhileLoopNode {
     condition: Expression,
     block: Block,
@@ -274,6 +293,7 @@ impl Executable for WhileLoopNode {
     }
 }
 
+#[derive(Debug)]
 pub struct ForLoopNode {
     iterable: Expression,
     loop_variable: String,
@@ -307,6 +327,7 @@ impl Executable for ForLoopNode {
 }
 
 
+#[derive(Debug)]
 pub struct BreakNode;
 impl Executable for BreakNode {
     fn execute(&self, _runtime: &mut Runtime) -> Result<(), Error> {
@@ -315,6 +336,7 @@ impl Executable for BreakNode {
 }
 
 
+#[derive(Debug)]
 pub struct ContinueNode;
 impl Executable for ContinueNode {
     fn execute(&self, _runtime: &mut Runtime) -> Result<(), Error> {
@@ -323,6 +345,7 @@ impl Executable for ContinueNode {
 }
 
 
+#[derive(Debug)]
 pub struct ReturnNode {
     return_value: Expression,
 }
@@ -339,6 +362,7 @@ impl Executable for ReturnNode {
 
 
 // TODO: function definition node
+#[derive(Debug)]
 pub struct FunctionDefinitionNode {
     name: String,
     parameters: Vec<String>,
