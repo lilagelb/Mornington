@@ -1,27 +1,23 @@
 use regex::Regex;
 
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Token<'a> {
-    token: TokenType,
-    text: &'a str,
-    position: Position,
+    pub kind: TokenKind,
+    pub text: &'a str,
+    pub(crate) position: Position,
 }
 impl<'a> Token<'a> {
-    fn new(token: TokenType, text: &str, line: usize, start: usize, length: usize) -> Token {
-        return Token {
-            token,
+    pub(crate) fn new(kind: TokenKind, text: &str, line: usize, start: usize, length: usize) -> Token {
+        Token {
+            kind,
             text,
-            position: Position {
-                line,
-                start,
-                length,
-            },
+            position: Position::new(line, start, length),
         }
     }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum TokenType {
+pub enum TokenKind {
     Newline,
     LParen, RParen, LBrack, RBrack,
     Comma, FullStop,
@@ -35,11 +31,24 @@ enum TokenType {
     Name,
 }
 
-#[derive(Debug, PartialEq)]
-struct Position {
-    line: usize,
-    start: usize,
-    length: usize,
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Position {
+    pub line: usize,
+    pub start: usize,
+    pub length: usize,
+}
+impl Position {
+    pub fn new(line: usize, start: usize, length: usize) -> Position {
+        Position { line, start, length }
+    }
+
+    pub(crate) fn one_past(&self) -> Position {
+        Position {
+            line: self.line,
+            start: self.start + self.length,
+            length: 1,
+        }
+    }
 }
 
 
@@ -66,7 +75,7 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn lex(&mut self) -> &Vec<Token> {
-        use TokenType::*;
+        use TokenKind::*;
 
         // whitespace
         let re_whitespace = Regex::new(r"^([ \t])+").unwrap();
@@ -117,7 +126,9 @@ impl<'a> Lexer<'a> {
         let re_return = Regex::new(r"^retrun\s").unwrap();
 
 
-        while self.remaining_source.len() != 0 {
+        // allows all the empty `else if`s below, necessary because they *must* be checked in that order
+        #[allow(clippy::if_same_then_else)]
+        while !self.remaining_source.is_empty() {
             // work out what the token at current_position is
 
             // whitespace
@@ -192,7 +203,7 @@ impl<'a> Lexer<'a> {
         &self.token_vec
     }
 
-    fn try_token_fixed_length(&mut self, token: TokenType, regex: &Regex, length: usize) -> bool {
+    fn try_token_fixed_length(&mut self, token: TokenKind, regex: &Regex, length: usize) -> bool {
         if let Some(mat) = regex.find(self.remaining_source) {
             self.push_token(token, mat.as_str(), length);
             true
@@ -200,7 +211,7 @@ impl<'a> Lexer<'a> {
             false
         }
     }
-    fn try_token_variable_length(&mut self, token: TokenType, regex: &Regex) -> bool {
+    fn try_token_variable_length(&mut self, token: TokenKind, regex: &Regex) -> bool {
         if let Some(mat) = regex.find(self.remaining_source) {
             self.push_token(token, mat.as_str(), mat.end());
             true
@@ -216,13 +227,13 @@ impl<'a> Lexer<'a> {
     /// To perform this, `try_token_keyword()` takes manual input of the text and length, rather
     /// than using the regex input to calculate it.
     fn try_token_keyword(&mut self,
-                         token: TokenType,
+                         token: TokenKind,
                          regex: &Regex,
                          token_text: &'a str,
                          length: usize)
-        -> bool
+                         -> bool
     {
-        if let Some(_) = regex.find(self.remaining_source) {
+        if regex.find(self.remaining_source).is_some() {
             self.push_token(token, token_text, length);
             true
         } else {
@@ -230,7 +241,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn push_token(&mut self, token: TokenType, token_text: &'a str, length: usize) {
+    fn push_token(&mut self, token: TokenKind, token_text: &'a str, length: usize) {
         self.current_token_length = length;
         self.token_vec.push(Token::new(
             token,
@@ -252,7 +263,7 @@ impl<'a> Lexer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use TokenType::*;
+    use TokenKind::*;
 
     #[test]
     fn newline() {
@@ -306,26 +317,26 @@ mod tests {
         )
     }
 
-    fn standard_symbol_test(token: TokenType, token_text: &str, length: usize) {
+    fn standard_symbol_test(token: TokenKind, token_text: &str, length: usize) {
         assert_eq!(
             vec![
                 Token::new(token, token_text, 1, 0, length),
                 Token::new(token, token_text, 1, length, length),
                 Token::new(token, token_text, 1, 2*length + 1, length),
             ],
-            *Lexer::new(&format!("{0}{0} {0} ", token_text)).lex(),
+            *Lexer::new(&format!("{token_text}{token_text} {token_text} ")).lex(),
         )
     }
     /// Adapted symbol test, for when the standard symbol test doesn't work properly due to the
     /// repeat of a symbol being another symbol, e.g. 2 `=`s next to one another should be parsed as
     /// one `==`, but the standard symbol test will mark that incorrectly as a failure.
-    fn adapted_symbol_test(token: TokenType, token_text: &str, length: usize) {
+    fn adapted_symbol_test(token: TokenKind, token_text: &str, length: usize) {
         assert_eq!(
             vec![
                 Token::new(token, token_text, 1, 0, length),
                 Token::new(token, token_text, 1, length + 1, length),
             ],
-            *Lexer::new(&format!("{0} {0} ", token_text)).lex(),
+            *Lexer::new(&format!("{token_text} {token_text} ")).lex(),
         )
     }
 
