@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 use crate::error::Error;
@@ -6,19 +7,76 @@ use crate::lexer::{Position, Token, TokenKind};
 use crate::runtime::Runtime;
 use crate::value::Value;
 
-// TODO: implement PartialEq for all node types to allow full test coverage
-
 
 pub trait Evaluable: Debug {
     fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error>;
+
+    fn to_expression(self) -> ExpressionNode;
 }
 
-pub type Expression = Box<dyn Evaluable>;
+#[derive(Debug, PartialEq)]
+pub enum ExpressionNode {
+    Constant(ConstantNode),
+    List(ListNode),
+    Operator(Box<OperatorNode>),
+    Variable(VariableNode),
+    FunctionCall(FunctionCallNode),
+}
+impl Evaluable for ExpressionNode {
+    fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error> {
+        match self {
+            ExpressionNode::Constant(node) => node.evaluate(runtime),
+            ExpressionNode::List(node) => node.evaluate(runtime),
+            ExpressionNode::Operator(node) => node.evaluate(runtime),
+            ExpressionNode::Variable(node) => node.evaluate(runtime),
+            ExpressionNode::FunctionCall(node) => node.evaluate(runtime),
+        }
+    }
+
+    fn to_expression(self) -> ExpressionNode {
+        self
+    }
+}
 
 pub trait Executable: Debug {
     fn execute(&self, runtime: &mut Runtime) -> Result<(), Error>;
+
+    fn to_statement(self) -> StatementNode;
 }
-type Statement = Box<dyn Executable>;
+
+#[derive(Debug, PartialEq)]
+pub enum StatementNode {
+    Block(Block),
+    Assign(AssignNode),
+    FunctionCall(FunctionCallNode),
+    Conditional(ConditionalNode),
+    ForLoop(ForLoopNode),
+    WhileLoop(WhileLoopNode),
+    Break(BreakNode),
+    Continue(ContinueNode),
+    Return(ReturnNode),
+    FunctionDefinition(FunctionDefinitionNode),
+}
+impl Executable for StatementNode {
+    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
+        match self {
+            StatementNode::Block(node) => node.execute(runtime),
+            StatementNode::Assign(node) => node.execute(runtime),
+            StatementNode::FunctionCall(node) => node.execute(runtime),
+            StatementNode::Conditional(node) => node.execute(runtime),
+            StatementNode::ForLoop(node) => node.execute(runtime),
+            StatementNode::WhileLoop(node) => node.execute(runtime),
+            StatementNode::Break(node) => node.execute(runtime),
+            StatementNode::Continue(node) => node.execute(runtime),
+            StatementNode::Return(node) => node.execute(runtime),
+            StatementNode::FunctionDefinition(node) => node.execute(runtime),
+        }
+    }
+
+    fn to_statement(self) -> StatementNode {
+        self
+    }
+}
 
 
 #[derive(Debug, PartialEq)]
@@ -34,15 +92,19 @@ impl Evaluable for ConstantNode {
     fn evaluate(&self, _: &Runtime) -> Result<Value, Error> {
         Ok(self.value.clone())
     }
+
+    fn to_expression(self) -> ExpressionNode {
+        ExpressionNode::Constant(self)
+    }
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ListNode {
-    list: Vec<Expression>,
+    list: Vec<ExpressionNode>,
 }
 impl ListNode {
-    pub fn new(list: Vec<Expression>) -> ListNode {
+    pub fn new(list: Vec<ExpressionNode>) -> ListNode {
         ListNode { list }
     }
 }
@@ -54,17 +116,21 @@ impl Evaluable for ListNode {
         }
         Ok(Value::List(evaluated_list))
     }
+
+    fn to_expression(self) -> ExpressionNode {
+        ExpressionNode::List(self)
+    }
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct OperatorNode {
-    lhs: Expression,
-    rhs: Expression,
+    lhs: ExpressionNode,
+    rhs: ExpressionNode,
     operator: Operator,
 }
 impl OperatorNode {
-    pub fn new(lhs: Expression, rhs: Expression, operator: Operator) -> OperatorNode {
+    pub fn new(lhs: ExpressionNode, rhs: ExpressionNode, operator: Operator) -> OperatorNode {
         OperatorNode { lhs, rhs, operator }
     }
 }
@@ -91,9 +157,13 @@ impl Evaluable for OperatorNode {
             Le => lhs.le(&rhs),
         })
     }
+
+    fn to_expression(self) -> ExpressionNode {
+        ExpressionNode::Operator(Box::new(self))
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Operator {
     Add, Sub, Mul, Div, Mod,
     Seq, Sne, Eq, Ne, Gt, Lt, Ge, Le,
@@ -129,7 +199,7 @@ impl Operator {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct VariableNode {
     name: String,
 }
@@ -146,10 +216,14 @@ impl Evaluable for VariableNode {
             Err(error) => Err(error),
         }
     }
+
+    fn to_expression(self) -> ExpressionNode {
+        ExpressionNode::Variable(self)
+    }
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FunctionCallNode {
     name: String,
     args: ListNode,
@@ -170,25 +244,33 @@ impl Evaluable for FunctionCallNode {
             todo!("function call node")
         }
     }
+
+    fn to_expression(self) -> ExpressionNode {
+        ExpressionNode::FunctionCall(self)
+    }
 }
 impl Executable for FunctionCallNode {
     fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         self.evaluate(runtime)?;
         Ok(())
     }
+
+    fn to_statement(self) -> StatementNode {
+        StatementNode::FunctionCall(self)
+    }
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Block {
-    statements: Vec<Statement>,
+    statements: Vec<StatementNode>,
 }
 impl Block {
     pub fn new() -> Block {
         Block { statements: Vec::new() }
     }
 
-    pub fn add_statement(&mut self, statement: Statement) {
+    pub fn add_statement(&mut self, statement: StatementNode) {
         self.statements.push(statement);
     }
 
@@ -207,15 +289,19 @@ impl Executable for Block {
         }
         Ok(())
     }
+
+    fn to_statement(self) -> StatementNode {
+        StatementNode::Block(self)
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct AssignNode {
     target: String,
-    expression: Expression,
+    expression: ExpressionNode,
 }
 impl AssignNode {
-    pub fn new(target: String, expression: Expression) -> AssignNode {
+    pub fn new(target: String, expression: ExpressionNode) -> AssignNode {
         AssignNode { target, expression }
     }
 }
@@ -225,10 +311,14 @@ impl Executable for AssignNode {
         runtime.set_variable(&self.target, self.expression.evaluate(runtime)?);
         Ok(())
     }
+
+    fn to_statement(self) -> StatementNode {
+        StatementNode::Assign(self)
+    }
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ConditionalNode {
     conditional_paths: Vec<ConditionalPath>,
     else_block: Option<Block>,
@@ -252,27 +342,31 @@ impl Executable for ConditionalNode {
         }
         Ok(())
     }
+
+    fn to_statement(self) -> StatementNode {
+        StatementNode::Conditional(self)
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ConditionalPath {
-    condition: Expression,
+    condition: ExpressionNode,
     block: Block,
 }
 impl ConditionalPath {
-    pub fn new(condition: Expression, block: Block) -> ConditionalPath {
+    pub fn new(condition: ExpressionNode, block: Block) -> ConditionalPath {
         ConditionalPath { condition, block }
     }
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct WhileLoopNode {
-    condition: Expression,
+    condition: ExpressionNode,
     block: Block,
 }
 impl WhileLoopNode {
-    pub fn new(condition: Expression, block: Block) -> WhileLoopNode {
+    pub fn new(condition: ExpressionNode, block: Block) -> WhileLoopNode {
         WhileLoopNode { condition, block }
     }
 }
@@ -291,16 +385,20 @@ impl Executable for WhileLoopNode {
         runtime.end_scope();
         Ok(())
     }
+
+    fn to_statement(self) -> StatementNode {
+        StatementNode::WhileLoop(self)
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ForLoopNode {
-    iterable: Expression,
+    iterable: ExpressionNode,
     loop_variable: String,
     block: Block,
 }
 impl ForLoopNode {
-    pub fn new(iterable: Expression, loop_variable: String, block: Block) -> ForLoopNode {
+    pub fn new(iterable: ExpressionNode, loop_variable: String, block: Block) -> ForLoopNode {
         ForLoopNode { iterable, loop_variable, block }
     }
 }
@@ -324,33 +422,45 @@ impl Executable for ForLoopNode {
         runtime.end_scope();
         Ok(())
     }
+
+    fn to_statement(self) -> StatementNode {
+        StatementNode::ForLoop(self)
+    }
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct BreakNode;
 impl Executable for BreakNode {
     fn execute(&self, _runtime: &mut Runtime) -> Result<(), Error> {
         Err(Error::new(Break, Position::new(0, 0, 0)))
     }
+
+    fn to_statement(self) -> StatementNode {
+        StatementNode::Break(self)
+    }
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ContinueNode;
 impl Executable for ContinueNode {
     fn execute(&self, _runtime: &mut Runtime) -> Result<(), Error> {
         Err(Error::new(Continue, Position::new(0, 0, 0)))
     }
+
+    fn to_statement(self) -> StatementNode {
+        StatementNode::Continue(self)
+    }
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ReturnNode {
-    return_value: Expression,
+    return_value: ExpressionNode,
 }
 impl ReturnNode {
-    pub fn new(return_value: Expression) -> ReturnNode {
+    pub fn new(return_value: ExpressionNode) -> ReturnNode {
         ReturnNode { return_value }
     }
 }
@@ -358,11 +468,15 @@ impl Executable for ReturnNode {
     fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         Err(Error::new(Return(self.return_value.evaluate(runtime)?), Position::new(0, 0, 0)))
     }
+
+    fn to_statement(self) -> StatementNode {
+        StatementNode::Return(self)
+    }
 }
 
 
 // TODO: function definition node
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FunctionDefinitionNode {
     name: String,
     parameters: Vec<String>,
@@ -378,5 +492,9 @@ impl FunctionDefinitionNode {
 impl Executable for FunctionDefinitionNode {
     fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         todo!()
+    }
+
+    fn to_statement(self) -> StatementNode {
+        StatementNode::FunctionDefinition(self)
     }
 }

@@ -85,7 +85,7 @@ impl<'a> Parser<'a> {
                                          closing_wrapper: TokenKind)
         -> Result<ListNode, Error>
     {
-        let mut list: Vec<Expression> = Vec::new();
+        let mut list: Vec<ExpressionNode> = Vec::new();
 
         // check for empty list eventuality
         match self.peek() {
@@ -128,7 +128,7 @@ impl<'a> Parser<'a> {
         Ok(ListNode::new(list))
     }
 
-    fn parse_expr(&mut self, current_operator_precedence: u32) -> Result<Expression, Error> {
+    fn parse_expr(&mut self, current_operator_precedence: u32) -> Result<ExpressionNode, Error> {
         // going token by token:
         // - if the token is an LParen, dig out the RParen, putting the intermediate tokens into
         //   a secondary token stream, then call parse_expr on that to get its value. Then,
@@ -145,7 +145,7 @@ impl<'a> Parser<'a> {
         use TokenKind::*;
 
 
-        let mut lhs: Option<Expression> = None;
+        let mut lhs: Option<ExpressionNode> = None;
 
         while let Some(token) = self.peek() {
             match token.kind {
@@ -207,11 +207,11 @@ impl<'a> Parser<'a> {
                         let rhs = self.parse_expr(precedence)?;
 
 
-                        lhs = Some(Box::new(OperatorNode::new(
+                        lhs = Some(OperatorNode::new(
                             lhs_unwrapped,
                             rhs,
                             operator,
-                        )));
+                        ).to_expression());
                         continue;
                     } else {
                         // this operator has a lower precedence, so the previous operator should
@@ -226,14 +226,14 @@ impl<'a> Parser<'a> {
                 Number | BoolTrue | BoolFalse | String => {
                     // constant
                     self.advance();
-                    lhs = Some(Box::new(Self::parse_constant(&self.current_token.unwrap())?));
+                    lhs = Some(Self::parse_constant(&self.current_token.unwrap())?.to_expression());
                 },
                 LBrack => {
                     // list
                     self.advance();
-                    lhs = Some(Box::new(self.parse_list(
+                    lhs = Some(self.parse_list(
                         self.previous_token.unwrap().text
-                    )?));
+                    )?.to_expression());
                 },
                 Name => {
                     // variable or function
@@ -243,13 +243,13 @@ impl<'a> Parser<'a> {
                         if token.kind == LParen {
                             let opener = token.text;
                             self.advance();
-                            return Ok(Box::new(FunctionCallNode::new(
+                            return Ok(FunctionCallNode::new(
                                 name,
                                 self.parse_function_arguments(opener)?
-                            )));
+                            ).to_expression());
                         }
                     }
-                    lhs = Some(Box::new(VariableNode::new(name)));
+                    lhs = Some(VariableNode::new(name).to_expression());
                 },
                 _other_token_type => break,
             }
@@ -264,12 +264,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression(&mut self) -> Result<Expression, Error> {
+    fn parse_expression(&mut self) -> Result<ExpressionNode, Error> {
         self.parse_expr(0)
     }
 
     fn parse_expression_and_block(&mut self, current_indentation_level: usize)
-        -> Result<(Expression, Block), Error>
+        -> Result<(ExpressionNode, Block), Error>
     {
         let expression = self.parse_expression()?;
         self.eat_token(TokenKind::Newline)?;
@@ -324,15 +324,15 @@ impl<'a> Parser<'a> {
                                 name,
                                 self.parse_function_arguments(opener)?
                             );
-                            block.add_statement(Box::new(function_call));
+                            block.add_statement(function_call.to_statement());
                         },
                         Assign => {
                             // assignment
                             let expression = self.parse_expression()?;
-                            block.add_statement(Box::new(AssignNode::new(
+                            block.add_statement(AssignNode::new(
                                 name,
                                 expression,
-                            )));
+                            ).to_statement());
                         },
                         other_token_kind => return Err(Error::new(
                             UnexpectedToken(other_token_kind),
@@ -371,9 +371,9 @@ impl<'a> Parser<'a> {
                         }
                     }
 
-                    block.add_statement(Box::new(ConditionalNode::new(
+                    block.add_statement(ConditionalNode::new(
                         conditional_paths, else_block,
-                    )));
+                    ).to_statement());
                 },
                 For => {
                     // for loop
@@ -384,9 +384,9 @@ impl<'a> Parser<'a> {
                     self.eat_token(Newline)?;
                     let for_block = self.parse_block(indentation_level + 1)?;
                     
-                    block.add_statement(Box::new(ForLoopNode::new(
+                    block.add_statement(ForLoopNode::new(
                         iterable, loop_variable, for_block,
-                    )));
+                    ).to_statement());
                 },
                 While => {
                     // while loop
@@ -395,26 +395,26 @@ impl<'a> Parser<'a> {
                     self.eat_token(Newline)?;
                     let while_block = self.parse_block(indentation_level + 1)?;
                     
-                    block.add_statement(Box::new(WhileLoopNode::new(
+                    block.add_statement(WhileLoopNode::new(
                         condition, while_block
-                    )));
+                    ).to_statement());
                 },
                 Break => {
                     // break
                     self.advance();
-                    block.add_statement(Box::new(BreakNode));
+                    block.add_statement(BreakNode.to_statement());
                 },
                 Continue => {
                     // break
                     self.advance();
-                    block.add_statement(Box::new(ContinueNode));
+                    block.add_statement(ContinueNode.to_statement());
                 },
                 Return => {
                     // return
                     let return_value = self.parse_expression()?;
-                    block.add_statement(Box::new(ReturnNode::new(
+                    block.add_statement(ReturnNode::new(
                         return_value
-                    )));
+                    ).to_statement());
                 },
                 Funcdef => {
                     // function definition
