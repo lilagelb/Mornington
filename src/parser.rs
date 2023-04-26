@@ -565,7 +565,7 @@ mod tests {
             parser.advance();
             assert_eq!(
                 Value::List(expected),
-                parser.parse_list(opener).unwrap().evaluate(&Runtime::new()).unwrap(),
+                parser.parse_list(opener).unwrap().evaluate(&mut Runtime::new()).unwrap(),
             );
         }
 
@@ -715,17 +715,19 @@ mod tests {
         }
     }
 
+    // TODO: move these tests to ast.rs, as they test execution, and replace with token to AST tests
+    //       that test the parser specifically
     mod parse_expr_tests {
         use super::*;
 
-        fn evaluate_expression_with_runtime(test_string: &str, runtime: &Runtime) -> Value {
-            Parser::new(Lexer::new(test_string).lex().clone())
+        fn evaluate_expression_with_runtime(test_string: &str, runtime: &mut Runtime) -> Value {
+            let expression = Parser::new(Lexer::new(test_string).lex().clone())
                 .parse_expr(0)
-                .unwrap()
-                .evaluate(runtime).unwrap()
+                .unwrap();
+            expression.evaluate(runtime).unwrap()
         }
         fn evaluate_expression(test_string: &str) -> Value {
-            evaluate_expression_with_runtime(test_string, &Runtime::new())
+            evaluate_expression_with_runtime(test_string, &mut Runtime::new())
         }
 
         #[test]
@@ -813,7 +815,7 @@ mod tests {
                 Value::Number(1.0),
                 evaluate_expression_with_runtime(
                     "a",
-                    &runtime,
+                    &mut runtime,
                 ),
             );
         }
@@ -829,7 +831,7 @@ mod tests {
                 Value::Number(8.0),
                 evaluate_expression_with_runtime(
                     "seven - five % 2 + three * four / (2 + four))",
-                    &runtime,
+                    &mut runtime,
                 ),
             )
         }

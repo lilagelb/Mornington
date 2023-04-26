@@ -1,15 +1,13 @@
-use std::any::Any;
-use std::fmt::{Debug, Formatter};
-use std::ops::Deref;
+use std::fmt::Debug;
 use crate::error::Error;
-use crate::error::ErrorKind::{Break, Continue, Return};
+use crate::error::ErrorKind::{Break, Continue, Return, Signature};
 use crate::lexer::{Position, Token, TokenKind};
 use crate::runtime::Runtime;
 use crate::value::Value;
 
 
 pub trait Evaluable: Debug {
-    fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error>;
+    fn evaluate(&self, runtime: &mut Runtime) -> Result<Value, Error>;
 
     fn to_expression(self) -> ExpressionNode;
 }
@@ -22,8 +20,9 @@ pub enum ExpressionNode {
     Variable(VariableNode),
     FunctionCall(FunctionCallNode),
 }
+
 impl Evaluable for ExpressionNode {
-    fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error> {
+    fn evaluate(&self, runtime: &mut Runtime) -> Result<Value, Error> {
         match self {
             ExpressionNode::Constant(node) => node.evaluate(runtime),
             ExpressionNode::List(node) => node.evaluate(runtime),
@@ -39,7 +38,7 @@ impl Evaluable for ExpressionNode {
 }
 
 pub trait Executable: Debug {
-    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error>;
+    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error>;
 
     fn to_statement(self) -> StatementNode;
 }
@@ -57,8 +56,9 @@ pub enum StatementNode {
     Return(ReturnNode),
     FunctionDefinition(FunctionDefinitionNode),
 }
+
 impl Executable for StatementNode {
-    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
+    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
         match self {
             StatementNode::Block(node) => node.execute(runtime),
             StatementNode::Assign(node) => node.execute(runtime),
@@ -89,7 +89,7 @@ impl ConstantNode {
     }
 }
 impl Evaluable for ConstantNode {
-    fn evaluate(&self, _: &Runtime) -> Result<Value, Error> {
+    fn evaluate(&self, _runtime: &mut Runtime) -> Result<Value, Error> {
         Ok(self.value.clone())
     }
 
@@ -109,7 +109,7 @@ impl ListNode {
     }
 }
 impl Evaluable for ListNode {
-    fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error> {
+    fn evaluate(&self, runtime: &mut Runtime) -> Result<Value, Error> {
         let mut evaluated_list = Vec::new();
         for element in &self.list {
             evaluated_list.push(element.evaluate(runtime)?);
@@ -136,7 +136,7 @@ impl OperatorNode {
 }
 
 impl Evaluable for OperatorNode {
-    fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error> {
+    fn evaluate(&self, runtime: &mut Runtime) -> Result<Value, Error> {
         let lhs = self.lhs.evaluate(runtime)?;
         let rhs = self.rhs.evaluate(runtime)?;
 
@@ -210,7 +210,7 @@ impl VariableNode {
 }
 
 impl Evaluable for VariableNode {
-    fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error> {
+    fn evaluate(&self, runtime: &mut Runtime) -> Result<Value, Error> {
         match runtime.get_variable(&self.name) {
             Ok(value_ref) => Ok(value_ref.clone()),
             Err(error) => Err(error),
@@ -235,7 +235,50 @@ impl FunctionCallNode {
 }
 
 impl Evaluable for FunctionCallNode {
-    fn evaluate(&self, runtime: &Runtime) -> Result<Value, Error> {
+    fn evaluate(&self, runtime: &mut Runtime) -> Result<Value, Error> {
+        runtime.begin_scope();
+
+        let definition = match runtime.get_function_definition(&self.name) {
+            Ok(definition) => definition,
+            Err(_) => todo!(),
+        };
+
+        let num_params = definition.parameters.len();
+
+        if self.args.list.len() != num_params {
+            return Err(Error::new(
+                Signature {
+                    function_name: self.name.clone(),
+                    expected_args: num_params,
+                    passed_args: self.args.list.len()
+                },
+                Position::new(0, 0, 0),
+            ));
+        }
+
+        let params: Vec<String> = definition.parameters.to_vec();
+        let mut values = Vec::new();
+        for arg in &self.args.list {
+            values.push(arg.evaluate(runtime)?);
+        }
+
+        for (param, value) in params.iter().zip(values) {
+            runtime.set_variable(param, value);
+        }
+
+        let definition = match runtime.get_function_definition(&self.name) {
+            Ok(defintion) => defintion,
+            Err(error) => {
+                // there was no function with the name defined by the user
+                // check the builtins list instead
+                // if nothing is found, allow this error to propagate
+                todo!()
+            },
+        };
+        definition.execute(runtime)?;
+
+        runtime.end_scope();
+
         // TODO: this is a TEMPORARY HACK to get some output working for some basic testing
         if self.name == "prointl" {
             println!("{}", self.args.list[0].evaluate(runtime)?.coerce_to_string());
@@ -250,7 +293,7 @@ impl Evaluable for FunctionCallNode {
     }
 }
 impl Executable for FunctionCallNode {
-    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
+    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
         self.evaluate(runtime)?;
         Ok(())
     }
@@ -261,7 +304,7 @@ impl Executable for FunctionCallNode {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Block {
     statements: Vec<StatementNode>,
 }
@@ -274,7 +317,7 @@ impl Block {
         self.statements.push(statement);
     }
 
-    fn execute_in_new_scope(&self, runtime: &mut Runtime) -> Result<(), Error> {
+    fn execute_in_new_scope<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
         runtime.begin_scope();
         self.execute(runtime)?;
         runtime.end_scope();
@@ -283,7 +326,7 @@ impl Block {
 }
 
 impl Executable for Block {
-    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
+    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
         for statement in &self.statements {
             statement.execute(runtime)?;
         }
@@ -307,8 +350,9 @@ impl AssignNode {
 }
 
 impl Executable for AssignNode {
-    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
-        runtime.set_variable(&self.target, self.expression.evaluate(runtime)?);
+    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+        let value = self.expression.evaluate(runtime)?;
+        runtime.set_variable(&self.target, value);
         Ok(())
     }
 
@@ -330,7 +374,7 @@ impl ConditionalNode {
 }
 
 impl Executable for ConditionalNode {
-    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
+    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
         for ConditionalPath { condition, block: path } in &self.conditional_paths {
             if condition.evaluate(runtime)?.coerce_to_bool() {
                 path.execute_in_new_scope(runtime)?;
@@ -371,7 +415,7 @@ impl WhileLoopNode {
     }
 }
 impl Executable for WhileLoopNode {
-    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
+    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
         runtime.begin_scope();
         while self.condition.evaluate(runtime)?.coerce_to_bool() {
             // execute the loop block, catching any propagated breaks or continues
@@ -403,7 +447,7 @@ impl ForLoopNode {
     }
 }
 impl Executable for ForLoopNode {
-    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
+    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
         let iterable = self.iterable.evaluate(runtime)?.coerce_to_list();
         if iterable.is_empty() {
             return Ok(());
@@ -465,8 +509,9 @@ impl ReturnNode {
     }
 }
 impl Executable for ReturnNode {
-    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
-        Err(Error::new(Return(self.return_value.evaluate(runtime)?), Position::new(0, 0, 0)))
+    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+        let return_value = self.return_value.evaluate(runtime)?;
+        Err(Error::new(Return(return_value), Position::new(0, 0, 0)))
     }
 
     fn to_statement(self) -> StatementNode {
@@ -475,7 +520,6 @@ impl Executable for ReturnNode {
 }
 
 
-// TODO: function definition node
 #[derive(Debug, PartialEq)]
 pub struct FunctionDefinitionNode {
     name: String,
@@ -490,8 +534,9 @@ impl FunctionDefinitionNode {
     }
 }
 impl Executable for FunctionDefinitionNode {
-    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
-        todo!()
+    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+        runtime.set_function_definition(&self.name, self);
+        Ok(())
     }
 
     fn to_statement(self) -> StatementNode {

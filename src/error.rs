@@ -28,6 +28,7 @@ pub enum ErrorKind {
     IncorrectNumberOfFormatStringArguments { expected: usize, received: usize },
     Name(String),
     ConsistentIndentation { previous_indentation: usize },
+    Signature { function_name: String, expected_args: usize, passed_args: usize },
     Break,
     Continue,
     Return(Value),
