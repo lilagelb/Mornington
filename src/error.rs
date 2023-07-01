@@ -32,4 +32,5 @@ pub enum ErrorKind {
     Break,
     Continue,
     Return(Value),
+    Input,
 }

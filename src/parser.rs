@@ -279,7 +279,7 @@ impl<'a> Parser<'a> {
                     // variable or function
                     let name = token.text.to_string();
                     self.advance();
-                    if let Some(token) = self.current_token {
+                    if let Some(token) = self.peek() {
                         if token.kind == LParen {
                             let opener = token.text;
                             self.advance();
@@ -451,6 +451,7 @@ impl<'a> Parser<'a> {
                 },
                 Return => {
                     // return
+                    self.advance();
                     let return_value = self.parse_expression()?;
                     block.add_statement(ReturnNode::new(
                         return_value

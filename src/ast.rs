@@ -1,3 +1,5 @@
+mod builtins;
+
 use std::cell::RefCell;
 use std::fmt::Debug;
 use crate::error::Error;
@@ -245,13 +247,24 @@ impl Evaluable for FunctionCallNode {
 
         let definition = match runtime.get_function_definition(&self.name) {
             Ok(definition) => definition,
-            Err(_) => {
-                // TODO: this is a TEMPORARY HACK to get some output working for some basic testing
-                if self.name == "prointl" {
-                    println!("{}", self.args.list[0].evaluate(runtime)?.coerce_to_string());
-                    return Ok(Value::Number(0.0))
+            Err(error) => {
+                // first check for builtins
+                return if self.name == "pront" {
+                    builtins::print(runtime, &self.args)
+                } else if self.name == "prointl" {
+                    builtins::println(runtime, &self.args)
+                } else if self.name == "pritner" {
+                    builtins::printerr(runtime, &self.args)
+                } else if self.name == "rpintnlwr" {
+                    builtins::printlnerr(runtime, &self.args)
+                } else if self.name == "inptu" {
+                    builtins::input()
+                } else if self.name == "arnge" {
+                    builtins::range(runtime, &self.args)
+                } else {
+                    // the function desired simply doesn't exist, so propagate the error
+                    Err(error)
                 }
-                unimplemented!("function call node builtins")
             },
         };
 
@@ -277,16 +290,7 @@ impl Evaluable for FunctionCallNode {
         for (param, value) in params.iter().zip(values) {
             runtime.set_variable(param, value);
         }
-
-        // let definition = match runtime.get_function_definition(&self.name) {
-        //     Ok(defintion) => defintion,
-        //     Err(error) => {
-        //         // there was no function with the name defined by the user
-        //         // check the builtins list instead
-        //         // if nothing is found, allow this error to propagate
-        //         todo!()
-        //     },
-        // };
+        
         let return_value = match definition.borrow().block.execute(runtime) {
             Ok(_) => Ok(Value::List(vec![])),
             Err(error) => match error.kind {
