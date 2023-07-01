@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use crate::ast::{Block, FunctionDefinitionNode};
 use crate::error::{Error, ErrorKind::Name};
 use crate::lexer::Position;
@@ -6,19 +8,19 @@ use crate::value::Value;
 
 
 #[derive(Debug, Default, PartialEq)]
-pub struct Runtime<'a> {
-    stack: Vec<Scope<'a>>,
+pub struct Runtime {
+    stack: Vec<Scope>,
 }
 
 #[derive(Debug, Default, PartialEq)]
-pub struct Scope<'a> {
+pub struct Scope {
     variables: HashMap<String, Value>,
-    functions: HashMap<String, &'a FunctionDefinitionNode>
+    functions: HashMap<String, Rc<RefCell<FunctionDefinitionNode>>>,
 }
 
 
-impl<'a> Runtime<'a> {
-    pub fn new() -> Runtime<'a> {
+impl Runtime {
+    pub fn new() -> Runtime {
         Runtime {
             stack: vec![Scope::new()],
         }
@@ -50,7 +52,7 @@ impl<'a> Runtime<'a> {
         self.stack.last_mut().unwrap().set_variable(name, value);
     }
 
-    pub fn get_function_definition(&self, name: &str) -> Result<&&FunctionDefinitionNode, Error> {
+    pub fn get_function_definition(&self, name: &str) -> Result<Rc<RefCell<FunctionDefinitionNode>>, Error> {
         for scope in self.stack.iter().rev() {
             if let Some(definition) = scope.get_function_definition(name) {
                 return Ok(definition)
@@ -59,15 +61,15 @@ impl<'a> Runtime<'a> {
         Err(Error::new(Name(name.to_string()), Position::new(0, 0, 0)))
     }
 
-    pub fn set_function_definition(&mut self, name: &str, definition: &'a FunctionDefinitionNode) {
+    pub fn set_function_definition(&mut self, name: &str, definition: RefCell<FunctionDefinitionNode>) {
         let top_scope = self.stack.last_mut().expect("`set_function_definition()` called after last scope closed");
         top_scope.set_function_definition(name, definition);
     }
 }
 
 
-impl<'a> Scope<'a> {
-    pub fn new() -> Scope<'a> {
+impl Scope {
+    pub fn new() -> Scope {
         Scope {
             variables: HashMap::new(),
             functions: HashMap::new(),
@@ -86,15 +88,15 @@ impl<'a> Scope<'a> {
         }
     }
 
-    pub fn get_function_definition(&self, name: &str) -> Option<&&FunctionDefinitionNode> {
-        self.functions.get(name)
+    pub fn get_function_definition(&self, name: &str) -> Option<Rc<RefCell<FunctionDefinitionNode>>> {
+        Some(Rc::clone(self.functions.get(name)?))
     }
 
-    pub fn set_function_definition(&mut self, name: &str, definition: &'a FunctionDefinitionNode) {
+    pub fn set_function_definition(&mut self, name: &str, definition: RefCell<FunctionDefinitionNode>) {
         if let Some(existing_definition) = self.functions.get_mut(name) {
-            *existing_definition = definition;
+            *existing_definition = Rc::new(definition);
         } else {
-            self.functions.insert(name.to_string(), definition);
+            self.functions.insert(name.to_string(), Rc::new(definition));
         }
     }
 }
@@ -270,18 +272,18 @@ mod tests {
                 stack: vec![
                     {
                         let mut scope = Scope::new();
-                        scope.set_function_definition("a", &lower_definition);
+                        scope.set_function_definition("a", RefCell::new(lower_definition));
                         scope
                     }, {
                         let mut scope = Scope::new();
-                        scope.set_function_definition("a", &upper_definition);
+                        scope.set_function_definition("a", RefCell::new(upper_definition.clone()));
                         scope
                     }
                 ]
             };
             assert_eq!(
                 upper_definition,
-                **runtime.get_function_definition("a").unwrap()
+                *runtime.get_function_definition("a").unwrap().borrow()
             );
         }
 
@@ -294,18 +296,18 @@ mod tests {
                 stack: vec![
                     {
                         let mut scope = Scope::new();
-                        scope.set_function_definition("b", &b_definition);
+                        scope.set_function_definition("b", RefCell::new(b_definition.clone()));
                         scope
                     }, {
                         let mut scope = Scope::new();
-                        scope.set_function_definition("a", &a_definition);
+                        scope.set_function_definition("a", RefCell::new(a_definition));
                         scope
                     }
                 ]
             };
             assert_eq!(
                 b_definition,
-                **runtime.get_function_definition("b").unwrap(),
+                *runtime.get_function_definition("b").unwrap().borrow(),
             );
         }
 
@@ -322,13 +324,13 @@ mod tests {
         fn set_function_defines_new_function_in_highest_scope_if_no_existing_definition() {
             let definition = generic_function_definition_returning(Value::Bool(false));
             let mut runtime = Runtime::new();
-            runtime.set_function_definition("test", &definition);
+            runtime.set_function_definition("test", RefCell::new(definition.clone()));
             assert_eq!(
                 Runtime {
                     stack: vec![
                         {
                             let mut scope = Scope::new();
-                            scope.set_function_definition("test", &definition);
+                            scope.set_function_definition("test", RefCell::new(definition));
                             scope
                         },
                     ]
@@ -345,24 +347,24 @@ mod tests {
                 stack: vec![
                     {
                         let mut scope = Scope::new();
-                        scope.set_function_definition("test", &lower_definition);
+                        scope.set_function_definition("test", RefCell::new(lower_definition.clone()));
                         scope
                     },
                     Scope::new(),
                 ]
             };
-            runtime.set_function_definition("test", &upper_definition);
+            runtime.set_function_definition("test", RefCell::new(upper_definition.clone()));
             assert_eq!(
                 Runtime {
                     stack: vec![
                         {
                             let mut scope = Scope::new();
-                            scope.set_function_definition("test", &lower_definition);
+                            scope.set_function_definition("test", RefCell::new(lower_definition));
                             scope
                         },
                         {
                             let mut scope = Scope::new();
-                            scope.set_function_definition("test", &upper_definition);
+                            scope.set_function_definition("test", RefCell::new(upper_definition));
                             scope
                         },
                     ]
@@ -379,27 +381,27 @@ mod tests {
                 stack: vec![
                     {
                         let mut scope = Scope::new();
-                        scope.set_function_definition("a", &lower_definition);
+                        scope.set_function_definition("a", RefCell::new(lower_definition.clone()));
                         scope
                     }, {
                         let mut scope = Scope::new();
-                        scope.set_function_definition("a", &upper_definition);
+                        scope.set_function_definition("a", RefCell::new(upper_definition.clone()));
                         scope
                     }
                 ]
             };
             let replacement_definition = generic_function_definition_returning(Value::Number(3.0));
-            runtime.set_function_definition("a", &replacement_definition);
+            runtime.set_function_definition("a", RefCell::new(replacement_definition.clone()));
             assert_eq!(
                 Runtime {
                     stack: vec![
                         {
                             let mut scope = Scope::new();
-                            scope.set_function_definition("a", &lower_definition);
+                            scope.set_function_definition("a", RefCell::new(lower_definition));
                             scope
                         }, {
                             let mut scope = Scope::new();
-                            scope.set_function_definition("a", &replacement_definition);
+                            scope.set_function_definition("a", RefCell::new(replacement_definition));
                             scope
                         }
                     ]
@@ -477,12 +479,12 @@ mod tests {
             let scope = Scope {
                 variables: HashMap::new(),
                 functions: HashMap::from([
-                    ("test".to_string(), &definition)
+                    ("test".to_string(), Rc::new(RefCell::new(definition.clone())))
                 ]),
             };
             assert_eq!(
                 definition,
-                **scope.get_function_definition("test").unwrap(),
+                *scope.get_function_definition("test").unwrap().borrow(),
             );
         }
 
@@ -503,11 +505,11 @@ mod tests {
             let definition = generic_function_definition_returning(Value::Bool(true));
 
             let mut scope = Scope::new();
-            scope.set_function_definition("test", &definition);
+            scope.set_function_definition("test", RefCell::new(definition.clone()));
 
             assert_eq!(
                 definition,
-                **scope.get_function_definition("test").unwrap(),
+                *scope.get_function_definition("test").unwrap().borrow(),
             );
         }
 
@@ -517,11 +519,11 @@ mod tests {
             let definition_new = generic_function_definition_returning(Value::Bool(false));
 
             let mut scope = Scope::new();
-            scope.set_function_definition("a", &definition_old);
-            scope.set_function_definition("a", &definition_new);
+            scope.set_function_definition("a", RefCell::new(definition_old));
+            scope.set_function_definition("a", RefCell::new(definition_new.clone()));
             assert_eq!(
                 definition_new,
-                **scope.get_function_definition("a").unwrap(),
+                *scope.get_function_definition("a").unwrap().borrow(),
             );
         }
     }

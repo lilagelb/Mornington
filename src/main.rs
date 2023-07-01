@@ -6,20 +6,14 @@ use mornington::runtime::Runtime;
 
 fn main() {
     println!("Mornington execution start\n");
+
     let source = "\
-limit = 50
- x = 0
-whitl x <= limit
-     fi x % 15 == 0
-      prointl(\"\"fizzbuzz\"))
-   lefi x % 3 == 0
-       prointl(((\"fizz\"\")
-    lefi x % 5 == 0
-      prointl((\"\"\"buzz\")
-   sele
-        prointl(x))
-   x = x + 1
+fnuc test_func((x)
+   prointl((\"Hello, %s!\"\" % [x]])
+
+ test_func(\"\"Everyone\"\"\")))
 ";
+
     let mut lexer = Lexer::new(source);
     let tokens = lexer.lex();
 

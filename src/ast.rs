@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fmt::Debug;
 use crate::error::Error;
 use crate::error::ErrorKind::{Break, Continue, Return, Signature};
@@ -12,7 +13,7 @@ pub trait Evaluable: Debug {
     fn to_expression(self) -> ExpressionNode;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ExpressionNode {
     Constant(ConstantNode),
     List(ListNode),
@@ -38,12 +39,12 @@ impl Evaluable for ExpressionNode {
 }
 
 pub trait Executable: Debug {
-    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error>;
+    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error>;
 
     fn to_statement(self) -> StatementNode;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum StatementNode {
     Block(Block),
     Assign(AssignNode),
@@ -58,7 +59,7 @@ pub enum StatementNode {
 }
 
 impl Executable for StatementNode {
-    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         match self {
             StatementNode::Block(node) => node.execute(runtime),
             StatementNode::Assign(node) => node.execute(runtime),
@@ -79,7 +80,7 @@ impl Executable for StatementNode {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ConstantNode {
     value: Value,
 }
@@ -99,13 +100,17 @@ impl Evaluable for ConstantNode {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ListNode {
     list: Vec<ExpressionNode>,
 }
 impl ListNode {
     pub fn new(list: Vec<ExpressionNode>) -> ListNode {
         ListNode { list }
+    }
+
+    pub fn to_vec(self) -> Vec<ExpressionNode> {
+        self.list
     }
 }
 impl Evaluable for ListNode {
@@ -123,7 +128,7 @@ impl Evaluable for ListNode {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct OperatorNode {
     lhs: ExpressionNode,
     rhs: ExpressionNode,
@@ -163,7 +168,7 @@ impl Evaluable for OperatorNode {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Operator {
     Add, Sub, Mul, Div, Mod,
     Seq, Sne, Eq, Ne, Gt, Lt, Ge, Le,
@@ -199,7 +204,7 @@ impl Operator {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VariableNode {
     name: String,
 }
@@ -223,7 +228,7 @@ impl Evaluable for VariableNode {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FunctionCallNode {
     name: String,
     args: ListNode,
@@ -240,10 +245,17 @@ impl Evaluable for FunctionCallNode {
 
         let definition = match runtime.get_function_definition(&self.name) {
             Ok(definition) => definition,
-            Err(_) => todo!(),
+            Err(_) => {
+                // TODO: this is a TEMPORARY HACK to get some output working for some basic testing
+                if self.name == "prointl" {
+                    println!("{}", self.args.list[0].evaluate(runtime)?.coerce_to_string());
+                    return Ok(Value::Number(0.0))
+                }
+                unimplemented!("function call node builtins")
+            },
         };
 
-        let num_params = definition.parameters.len();
+        let num_params = definition.borrow().parameters.len();
 
         if self.args.list.len() != num_params {
             return Err(Error::new(
@@ -256,7 +268,7 @@ impl Evaluable for FunctionCallNode {
             ));
         }
 
-        let params: Vec<String> = definition.parameters.to_vec();
+        let params: Vec<String> = definition.borrow().parameters.to_vec();
         let mut values = Vec::new();
         for arg in &self.args.list {
             values.push(arg.evaluate(runtime)?);
@@ -266,26 +278,24 @@ impl Evaluable for FunctionCallNode {
             runtime.set_variable(param, value);
         }
 
-        let definition = match runtime.get_function_definition(&self.name) {
-            Ok(defintion) => defintion,
-            Err(error) => {
-                // there was no function with the name defined by the user
-                // check the builtins list instead
-                // if nothing is found, allow this error to propagate
-                todo!()
-            },
+        // let definition = match runtime.get_function_definition(&self.name) {
+        //     Ok(defintion) => defintion,
+        //     Err(error) => {
+        //         // there was no function with the name defined by the user
+        //         // check the builtins list instead
+        //         // if nothing is found, allow this error to propagate
+        //         todo!()
+        //     },
+        // };
+        let return_value = match definition.borrow().block.execute(runtime) {
+            Ok(_) => Ok(Value::List(vec![])),
+            Err(error) => match error.kind {
+                Return(value) => Ok(value),
+                _ => Err(error),
+            },  
         };
-        definition.execute(runtime)?;
-
         runtime.end_scope();
-
-        // TODO: this is a TEMPORARY HACK to get some output working for some basic testing
-        if self.name == "prointl" {
-            println!("{}", self.args.list[0].evaluate(runtime)?.coerce_to_string());
-            Ok(Value::Number(0.0))
-        } else {
-            todo!("function call node")
-        }
+        return_value
     }
 
     fn to_expression(self) -> ExpressionNode {
@@ -293,7 +303,7 @@ impl Evaluable for FunctionCallNode {
     }
 }
 impl Executable for FunctionCallNode {
-    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         self.evaluate(runtime)?;
         Ok(())
     }
@@ -304,7 +314,7 @@ impl Executable for FunctionCallNode {
 }
 
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Block {
     statements: Vec<StatementNode>,
 }
@@ -317,7 +327,7 @@ impl Block {
         self.statements.push(statement);
     }
 
-    fn execute_in_new_scope<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+    fn execute_in_new_scope(&self, runtime: &mut Runtime) -> Result<(), Error> {
         runtime.begin_scope();
         self.execute(runtime)?;
         runtime.end_scope();
@@ -326,7 +336,7 @@ impl Block {
 }
 
 impl Executable for Block {
-    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         for statement in &self.statements {
             statement.execute(runtime)?;
         }
@@ -338,7 +348,7 @@ impl Executable for Block {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AssignNode {
     target: String,
     expression: ExpressionNode,
@@ -350,7 +360,7 @@ impl AssignNode {
 }
 
 impl Executable for AssignNode {
-    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         let value = self.expression.evaluate(runtime)?;
         runtime.set_variable(&self.target, value);
         Ok(())
@@ -362,7 +372,7 @@ impl Executable for AssignNode {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ConditionalNode {
     conditional_paths: Vec<ConditionalPath>,
     else_block: Option<Block>,
@@ -374,7 +384,7 @@ impl ConditionalNode {
 }
 
 impl Executable for ConditionalNode {
-    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         for ConditionalPath { condition, block: path } in &self.conditional_paths {
             if condition.evaluate(runtime)?.coerce_to_bool() {
                 path.execute_in_new_scope(runtime)?;
@@ -392,7 +402,7 @@ impl Executable for ConditionalNode {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ConditionalPath {
     condition: ExpressionNode,
     block: Block,
@@ -404,7 +414,7 @@ impl ConditionalPath {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct WhileLoopNode {
     condition: ExpressionNode,
     block: Block,
@@ -415,7 +425,7 @@ impl WhileLoopNode {
     }
 }
 impl Executable for WhileLoopNode {
-    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         runtime.begin_scope();
         while self.condition.evaluate(runtime)?.coerce_to_bool() {
             // execute the loop block, catching any propagated breaks or continues
@@ -435,7 +445,7 @@ impl Executable for WhileLoopNode {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ForLoopNode {
     iterable: ExpressionNode,
     loop_variable: String,
@@ -447,7 +457,7 @@ impl ForLoopNode {
     }
 }
 impl Executable for ForLoopNode {
-    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         let iterable = self.iterable.evaluate(runtime)?.coerce_to_list();
         if iterable.is_empty() {
             return Ok(());
@@ -473,7 +483,7 @@ impl Executable for ForLoopNode {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BreakNode;
 impl Executable for BreakNode {
     fn execute(&self, _runtime: &mut Runtime) -> Result<(), Error> {
@@ -486,7 +496,7 @@ impl Executable for BreakNode {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ContinueNode;
 impl Executable for ContinueNode {
     fn execute(&self, _runtime: &mut Runtime) -> Result<(), Error> {
@@ -499,7 +509,7 @@ impl Executable for ContinueNode {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ReturnNode {
     return_value: ExpressionNode,
 }
@@ -509,7 +519,7 @@ impl ReturnNode {
     }
 }
 impl Executable for ReturnNode {
-    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
+    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         let return_value = self.return_value.evaluate(runtime)?;
         Err(Error::new(Return(return_value), Position::new(0, 0, 0)))
     }
@@ -520,7 +530,7 @@ impl Executable for ReturnNode {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FunctionDefinitionNode {
     name: String,
     parameters: Vec<String>,
@@ -534,8 +544,8 @@ impl FunctionDefinitionNode {
     }
 }
 impl Executable for FunctionDefinitionNode {
-    fn execute<'a>(&'a self, runtime: &mut Runtime<'a>) -> Result<(), Error> {
-        runtime.set_function_definition(&self.name, self);
+    fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
+        runtime.set_function_definition(&self.name, RefCell::new(self.clone()));
         Ok(())
     }
 

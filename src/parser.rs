@@ -15,7 +15,7 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     pub fn new(mut tokens: Vec<Token<'a>>) -> Parser<'a> {
         if tokens.is_empty() {
-            todo!("add error handling for this case");
+            panic!("No tokens passed, cannot initialise parser");
         }
         // reverse so that elements can easily and efficiently be popped off the end
         tokens.reverse();
@@ -126,6 +126,46 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(ListNode::new(list))
+    }
+
+    fn parse_function_parameter_names(&mut self, opener: &str) -> Result<Vec<String>, Error> {
+        // empty parentheses
+        match self.peek() {
+            Some(token) => {
+                if token.kind == TokenKind::RParen {
+                    self.advance();
+                    self.check_wrapper_balance(opener.to_string())?;
+                    return Ok(Vec::new());
+                }
+            },
+            None => return Err(Error::new(
+                UnexpectedEOF, self.previous_token.unwrap().position.one_past()
+            )),
+        }
+
+        let mut params = Vec::new();
+        loop {
+            params.push(self.eat_token(TokenKind::Name)?.text.to_string());
+            self.advance();
+            if self.current_token.is_none() {
+                return Err(Error::new(
+                    UnexpectedEOF, 
+                    self.previous_token.unwrap().position.one_past()
+                ));
+            }
+            match self.current_token.unwrap().kind {
+                TokenKind::Comma => continue,
+                TokenKind::RParen => {
+                    self.check_wrapper_balance(opener.to_string())?;
+                    break;
+                },
+                other_token => return Err(Error::new(
+                    UnexpectedToken(other_token),
+                    self.current_token.unwrap().position,
+                )),
+            }
+        }
+        Ok(params)
     }
 
     fn parse_expr(&mut self, current_operator_precedence: u32) -> Result<ExpressionNode, Error> {
@@ -418,7 +458,17 @@ impl<'a> Parser<'a> {
                 },
                 Funcdef => {
                     // function definition
-                    todo!()
+                    self.advance();
+                    // parse name, parameters, and block
+                    let name = self.eat_token(Name)?.text.to_string();
+                    let parentheses_opener = self.eat_token(LParen)?.text.to_string();
+                    let parameters = self.parse_function_parameter_names(&parentheses_opener)?;
+                    self.eat_token(Newline)?;
+                    let function_block = self.parse_block(indentation_level + 1)?;
+                    // wrap block into FunctionDefinitionNode and add to current block
+                    block.add_statement(FunctionDefinitionNode::new(
+                        name, parameters, function_block
+                    ).to_statement());
                 },
                 Newline => {
                     self.advance();
@@ -436,7 +486,6 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> Result<Block, Error> {
         self.parse_block(0)
     }
-
 
     fn advance(&mut self) {
         self.previous_token = self.current_token;
@@ -712,6 +761,192 @@ mod tests {
                     Token::new(RBrack, "]", 1, 18, 1),
                 ],
             );
+        }
+    }
+
+    mod parse_function_parameter_names_tests {
+        use super::*;
+
+        #[test]
+        fn empty_parentheses_not_balanced() {
+            let tokens = vec![
+                Token::new(RParen, "))", 1, 0, 2),
+            ];
+            assert_eq!(
+                Parser::new(tokens).parse_function_parameter_names("(").unwrap(),
+                Vec::<std::string::String>::new(),
+            )
+        }
+
+        #[test]
+        fn empty_parentheses_balanced_throws_balance_error() {
+            let tokens = vec![
+                Token::new(RParen, ")", 1, 0, 1),
+            ];
+            let error = Parser::new(tokens).parse_function_parameter_names("(").unwrap_err();
+            if let Balance {..} = error.kind
+            {} else {
+                panic!("Expected Balance error (got: {:?})", error.kind);
+            }
+        }
+
+        #[test]
+        fn only_open_parentheses_but_not_eof_throws_unexpected_token_error() {
+            let tokens = vec![
+                Token::new(Seq, "===", 1, 0, 3),
+            ];
+            let error = Parser::new(tokens).parse_function_parameter_names("(").unwrap_err();
+            if error.kind == UnexpectedToken(Seq) {
+            } else {
+                panic!("Expected UnexpectedToken error (got: {:?})", error.kind);
+            }
+        }
+
+        #[test]
+        fn single_parameter_parentheses_not_balanced() {
+            let tokens = vec![
+                Token::new(TokenKind::Name, "param1", 1, 0, 6),
+                Token::new(TokenKind::RParen, "))", 1, 7, 2),
+            ];
+            assert_eq!(
+                Parser::new(tokens).parse_function_parameter_names("(").unwrap(),
+                vec!["param1".to_string()],
+            )
+        }
+
+        #[test]
+        fn single_parameter_parentheses_balanced_throws_balance_error() {
+            let tokens = vec![
+                Token::new(TokenKind::Name, "param1", 1, 0, 6),
+                Token::new(TokenKind::RParen, ")", 1, 7, 1),
+            ];
+            let error = Parser::new(tokens).parse_function_parameter_names("(").unwrap_err();
+            if let Balance {..} = error.kind
+            {} else {
+                panic!("Expected Balance error (got: {:?})", error.kind);
+            }
+        }
+
+        #[test]
+        fn single_parameter_not_closed_throws_unexpected_eof_error() {
+            let tokens = vec![
+                Token::new(TokenKind::Name, "param1", 1, 0, 6),
+            ];
+            let error = Parser::new(tokens).parse_function_parameter_names("(").unwrap_err();
+            if error.kind == UnexpectedEOF {
+            } else {
+                panic!("Expected UnexpectedEOF error (got: {:?})", error.kind);
+            }
+        }
+
+        #[test]
+        fn single_parameter_not_closed_and_not_eof_throws_unexpected_token_error() {
+            let tokens = vec![
+                Token::new(TokenKind::Name, "param1", 1, 0, 6),
+                Token::new(Seq, "===", 1, 7, 3),
+            ];
+            let error = Parser::new(tokens).parse_function_parameter_names("(").unwrap_err();
+            if error.kind == UnexpectedToken(Seq) {
+            } else {
+                panic!("Expected UnexpectedToken error (got: {:?})", error.kind);
+            }
+        }
+
+        #[test]
+        fn multi_parameter_parentheses_not_balanced() {
+            let tokens = vec![
+                Token::new(TokenKind::Name, "param1", 1, 0, 6),
+                Token::new(TokenKind::Comma, ",", 1, 6, 1),
+                Token::new(TokenKind::Name, "param2", 1, 8, 6),
+                Token::new(TokenKind::Comma, ",", 1, 14, 1),
+                Token::new(TokenKind::Name, "param3", 1, 16, 6),
+                Token::new(TokenKind::RParen, "))", 1, 22, 2),
+            ];
+            assert_eq!(
+                Parser::new(tokens).parse_function_parameter_names("(").unwrap(),
+                vec!["param1".to_string(), "param2".to_string(), "param3".to_string()],
+            )
+        }
+
+        #[test]
+        fn multi_parameter_parentheses_balanced_throws_balance_error() {
+            let tokens = vec![
+                Token::new(TokenKind::Name, "param1", 1, 0, 6),
+                Token::new(TokenKind::Comma, ",", 1, 6, 1),
+                Token::new(TokenKind::Name, "param2", 1, 8, 6),
+                Token::new(TokenKind::Comma, ",", 1, 14, 1),
+                Token::new(TokenKind::Name, "param3", 1, 16, 6),
+                Token::new(TokenKind::RParen, ")", 1, 22, 1),
+            ];
+            let error = Parser::new(tokens).parse_function_parameter_names("(").unwrap_err();
+            if let Balance {..} = error.kind
+            {} else {
+                panic!("Expected Balance error (got: {:?})", error.kind);
+            }
+        }
+
+        #[test]
+        fn multi_parameter_not_closed_on_name_throws_unexpected_eof_error() {
+            let tokens = vec![
+                Token::new(TokenKind::Name, "param1", 1, 0, 6),
+                Token::new(TokenKind::Comma, ",", 1, 6, 1),
+                Token::new(TokenKind::Name, "param2", 1, 8, 6),
+                Token::new(TokenKind::Comma, ",", 1, 14, 1),
+                Token::new(TokenKind::Name, "param3", 1, 16, 6),
+            ];
+            let error = Parser::new(tokens).parse_function_parameter_names("(").unwrap_err();
+            if error.kind == UnexpectedEOF {
+            } else {
+                panic!("Expected UnexpectedEOF error (got: {:?})", error.kind);
+            }
+        }
+
+        #[test]
+        fn multi_parameter_not_closed_on_name_and_not_eof_throws_unexpected_token_error() {
+            let tokens = vec![
+                Token::new(TokenKind::Name, "param1", 1, 0, 6),
+                Token::new(TokenKind::Comma, ",", 1, 6, 1),
+                Token::new(TokenKind::Name, "param2", 1, 8, 6),
+                Token::new(TokenKind::Comma, ",", 1, 14, 1),
+                Token::new(TokenKind::Name, "param3", 1, 16, 6),
+                Token::new(Seq, "===", 1, 22, 3),
+            ];
+            let error = Parser::new(tokens).parse_function_parameter_names("(").unwrap_err();
+            if error.kind == UnexpectedToken(Seq) {
+            } else {
+                panic!("Expected UnexpectedToken error (got: {:?})", error.kind);
+            }
+        }
+
+        #[test]
+        fn multi_parameter_not_closed_on_comma_throws_unexpected_eof_error() {
+            let tokens = vec![
+                Token::new(TokenKind::Name, "param1", 1, 0, 6),
+                Token::new(TokenKind::Comma, ",", 1, 6, 1),
+                Token::new(TokenKind::Name, "param2", 1, 8, 6),
+                Token::new(TokenKind::Comma, ",", 1, 14, 1),
+            ];
+            let error = Parser::new(tokens).parse_function_parameter_names("(").unwrap_err();
+            if error.kind == UnexpectedEOF {
+            } else {
+                panic!("Expected UnexpectedEOF error (got: {:?})", error.kind);
+            }
+        }
+
+        #[test]
+        fn multi_parameter_not_closed_on_comma_and_not_eof_throws_unexpected_token_error() {
+            let tokens = vec![
+                Token::new(TokenKind::Name, "param1", 1, 0, 6),
+                Token::new(TokenKind::Comma, ",", 1, 6, 1),
+                Token::new(TokenKind::Name, "param2", 1, 8, 6),
+                Token::new(TokenKind::Comma, ",", 1, 14, 1),
+                Token::new(Seq, "===", 1, 15, 3),
+            ];
+            let error = Parser::new(tokens).parse_function_parameter_names("(").unwrap_err();
+            if error.kind == UnexpectedToken(Seq) {
+            } else {
+                panic!("Expected UnexpectedToken error (got: {:?})", error.kind);
+            }
         }
     }
 
