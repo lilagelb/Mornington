@@ -1,6 +1,4 @@
 use std::io;
-use std::io::Read;
-use std::string::FromUtf8Error;
 use crate::ast::{Evaluable, ListNode};
 use crate::error::Error;
 use crate::error::ErrorKind::{Input, Signature};

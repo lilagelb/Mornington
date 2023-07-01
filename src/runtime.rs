@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::ast::{Block, FunctionDefinitionNode};
+use crate::ast::FunctionDefinitionNode;
 use crate::error::{Error, ErrorKind::Name};
 use crate::lexer::Position;
 use crate::value::Value;
