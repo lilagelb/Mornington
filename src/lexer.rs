@@ -74,7 +74,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn lex(&mut self) -> &Vec<Token> {
+    pub fn lex(&mut self) -> Result<&Vec<Token>, Position> {
         use TokenKind::*;
 
         // whitespace
@@ -194,13 +194,17 @@ impl<'a> Lexer<'a> {
             // name
             else if self.try_token_variable_length(Name, &re_name) {}
             else {
-                panic!()
+                return Err(Position {
+                    line: self.current_line,
+                    start: self.current_column,
+                    length: 1,
+                })
             }
 
             self.update_positions();
         }
 
-        &self.token_vec
+        Ok(&self.token_vec)
     }
 
     fn try_token_fixed_length(&mut self, token: TokenKind, regex: &Regex, length: usize) -> bool {
@@ -272,7 +276,7 @@ mod tests {
                 Token::new(Newline, "\n", 1, 0, 1),
                 Token::new(Newline, "\n", 2, 0, 1),
             ],
-            *Lexer::new("\n\n").lex(),
+            *Lexer::new("\n\n").lex().unwrap(),
         )
     }
 
@@ -283,7 +287,7 @@ mod tests {
                 Token::new(LParen, "((", 1, 0, 2),
                 Token::new(LParen, "(", 1, 3, 1),
             ],
-            *Lexer::new("(( (").lex(),
+            *Lexer::new("(( (").lex().unwrap(),
         )
     }
     #[test]
@@ -293,7 +297,7 @@ mod tests {
                 Token::new(RParen, "))", 1, 0, 2),
                 Token::new(RParen, ")", 1, 3, 1),
             ],
-            *Lexer::new(")) )").lex(),
+            *Lexer::new(")) )").lex().unwrap(),
         )
     }
     #[test]
@@ -303,7 +307,7 @@ mod tests {
                 Token::new(LBrack, "[[", 1, 0, 2),
                 Token::new(LBrack, "[", 1, 3, 1),
             ],
-            *Lexer::new("[[ [").lex(),
+            *Lexer::new("[[ [").lex().unwrap(),
         )
     }
     #[test]
@@ -313,7 +317,7 @@ mod tests {
                 Token::new(RBrack, "]]", 1, 0, 2),
                 Token::new(RBrack, "]", 1, 3, 1),
             ],
-            *Lexer::new("]] ]").lex(),
+            *Lexer::new("]] ]").lex().unwrap(),
         )
     }
 
@@ -324,7 +328,7 @@ mod tests {
                 Token::new(token, token_text, 1, length, length),
                 Token::new(token, token_text, 1, 2*length + 1, length),
             ],
-            *Lexer::new(&format!("{token_text}{token_text} {token_text} ")).lex(),
+            *Lexer::new(&format!("{token_text}{token_text} {token_text} ")).lex().unwrap(),
         )
     }
     /// Adapted symbol test, for when the standard symbol test doesn't work properly due to the
@@ -336,7 +340,7 @@ mod tests {
                 Token::new(token, token_text, 1, 0, length),
                 Token::new(token, token_text, 1, length + 1, length),
             ],
-            *Lexer::new(&format!("{token_text} {token_text} ")).lex(),
+            *Lexer::new(&format!("{token_text} {token_text} ")).lex().unwrap(),
         )
     }
 
@@ -412,7 +416,7 @@ mod tests {
                 Token::new(Name, "m0r_nIngton_rul3z", 1, 0, 17),
                 Token::new(Name, "_h3lloWorld", 1, 19, 11),
             ],
-            *Lexer::new("m0r_nIngton_rul3z  _h3lloWorld").lex(),
+            *Lexer::new("m0r_nIngton_rul3z  _h3lloWorld").lex().unwrap(),
         )
     }
     #[test]

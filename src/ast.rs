@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use crate::error::Error;
 use crate::error::ErrorKind::{Break, Continue, Return, Signature};
-use crate::lexer::{Position, Token, TokenKind};
+use crate::lexer::{Token, TokenKind};
 use crate::runtime::Runtime;
 use crate::value::Value;
 

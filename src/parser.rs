@@ -537,6 +537,7 @@ mod tests {
     use super::*;
     use crate::lexer::TokenKind::*;
     use crate::lexer::Lexer;
+    use crate::runtime::Runtime;
 
     mod parse_constant_tests {
         use super::*;
@@ -952,10 +953,11 @@ mod tests {
     // TODO: move these tests to ast.rs, as they test execution, and replace with token to AST tests
     //       that test the parser specifically
     mod parse_expr_tests {
+        use crate::runtime::Runtime;
         use super::*;
 
         fn evaluate_expression_with_runtime(test_string: &str, runtime: &mut Runtime) -> Value {
-            let expression = Parser::new(Lexer::new(test_string).lex().clone())
+            let expression = Parser::new(Lexer::new(test_string).lex().unwrap().clone())
                 .parse_expr(0)
                 .unwrap();
             expression.evaluate(runtime).unwrap()
@@ -1030,7 +1032,7 @@ mod tests {
 
         #[test]
         fn balanced_parentheses_throw_error() {
-            let result = Parser::new(Lexer::new("(1)").lex().clone()).parse_expr(0);
+            let result = Parser::new(Lexer::new("(1)").lex().unwrap().clone()).parse_expr(0);
             match result {
                 Ok(_) => panic!("Expected Balance error, got Ok()"),
                 Err(Error { kind: Balance { opener, closer }, ..}) => {

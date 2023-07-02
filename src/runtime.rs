@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use crate::ast::FunctionDefinitionNode;
 use crate::error::{Error, ErrorKind::Name};
-use crate::lexer::Position;
 use crate::value::Value;
 
 
@@ -104,6 +103,7 @@ impl Scope {
 
 #[cfg(test)]
 mod tests {
+    use crate::ast::Block;
     use super::*;
 
     mod runtime_tests {
@@ -155,7 +155,7 @@ mod tests {
         fn get_variable_throws_name_error_if_variable_not_found() {
             let runtime = Runtime::new();
             assert_eq!(
-                Err(Error::new(Name("test".to_string()), Position::new(0, 0, 0))),
+                Err(Error::new(Name("test".to_string()), None)),
                 runtime.get_variable("test"),
             )
         }
@@ -315,7 +315,7 @@ mod tests {
         fn get_function_definition_throws_name_error_if_definition_not_found() {
             let runtime = Runtime::new();
             assert_eq!(
-                Err(Error::new(Name("test".to_string()), Position::new(0, 0, 0))),
+                Err(Error::new(Name("test".to_string()), None)),
                 runtime.get_function_definition("test"),
             );
         }

@@ -2,7 +2,6 @@ use std::io;
 use crate::ast::{Evaluable, ListNode};
 use crate::error::Error;
 use crate::error::ErrorKind::{Input, Signature};
-use crate::lexer::Position;
 use crate::runtime::Runtime;
 use crate::value::Value;
 

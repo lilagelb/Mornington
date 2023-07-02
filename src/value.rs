@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 use crate::error::{Error, ErrorKind::{InvalidFormatFlag, IncorrectNumberOfFormatStringArguments}};
-use crate::lexer::Position;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
