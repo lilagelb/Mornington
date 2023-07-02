@@ -11,7 +11,7 @@ fn main() {
 
     if args.len() == 1 {
         eprintln!("Error: no file passed for execution. Supply one using\n\
-            \tmorn <filename>\
+            \tmornington <filename>\n\
             Terminating..."
         );
         return;
@@ -63,7 +63,6 @@ fn main() {
             if let Some(position) = pos {
                 print_error_position(&source, position);
             }
-            return;
         }
     };
 }
