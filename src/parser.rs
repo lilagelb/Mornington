@@ -536,7 +536,6 @@ impl<'a> Parser<'a> {
 mod tests {
     use super::*;
     use crate::lexer::TokenKind::*;
-    use crate::lexer::Lexer;
     use crate::runtime::Runtime;
 
     mod parse_constant_tests {
@@ -951,18 +950,7 @@ mod tests {
     }
 
     mod parse_expr_tests {
-        use crate::runtime::Runtime;
         use super::*;
-
-        fn evaluate_expression_with_runtime(test_string: &str, runtime: &mut Runtime) -> Value {
-            let expression = Parser::new(Lexer::new(test_string).lex().unwrap().clone())
-                .parse_expr(0)
-                .unwrap();
-            expression.evaluate(runtime).unwrap()
-        }
-        fn evaluate_expression(test_string: &str) -> Value {
-            evaluate_expression_with_runtime(test_string, &mut Runtime::new())
-        }
 
         #[test]
         fn brackets_take_priority() {
