@@ -39,7 +39,7 @@ impl Runtime {
                 return Ok(value);
             }
         }
-        Err(Error::new(Name(name.to_string()), Position::new(0, 0, 0)))
+        Err(Error::new(Name(name.to_string()), None))
     }
 
     pub fn set_variable(&mut self, name: &str, value: Value) {
@@ -58,7 +58,7 @@ impl Runtime {
                 return Ok(definition)
             }
         }
-        Err(Error::new(Name(name.to_string()), Position::new(0, 0, 0)))
+        Err(Error::new(Name(name.to_string()), None))
     }
 
     pub fn set_function_definition(&mut self, name: &str, definition: RefCell<FunctionDefinitionNode>) {

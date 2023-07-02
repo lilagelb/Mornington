@@ -60,13 +60,13 @@ impl<'a> Parser<'a> {
                             opener: "\"".repeat(opener_length),
                             closer: "\"".repeat(closer_length),
                         },
-                        token.position
+                        Some(token.position)
                     ));
                 }
 
                 Ok(ConstantNode::new( Value::String(string_contents.to_string()) ))
             }
-            _ => Err(Error::new(UnexpectedToken(token.kind), token.position)),
+            _ => Err(Error::new(UnexpectedToken(token.kind), Some(token.position))),
         }
     }
 
@@ -95,7 +95,7 @@ impl<'a> Parser<'a> {
                 }
             },
             None => return Err(Error::new(
-                UnexpectedEOF, self.previous_token.unwrap().position.one_past()
+                UnexpectedEOF, Some(self.previous_token.unwrap().position.one_past())
             )),
         }
 
@@ -105,7 +105,7 @@ impl<'a> Parser<'a> {
             if self.current_token.is_none() {
                 return Err(Error::new(
                     UnexpectedEOF,
-                    self.previous_token.unwrap().position.one_past(),
+                    Some(self.previous_token.unwrap().position.one_past()),
                 ))
             }
             match self.current_token.unwrap().kind {
@@ -117,7 +117,7 @@ impl<'a> Parser<'a> {
                     } else {
                         return Err(Error::new(
                             UnexpectedToken(other_token),
-                            self.current_token.unwrap().position,
+                            Some(self.current_token.unwrap().position),
                         ));
                     }
                 }
@@ -137,7 +137,7 @@ impl<'a> Parser<'a> {
                 }
             },
             None => return Err(Error::new(
-                UnexpectedEOF, self.previous_token.unwrap().position.one_past()
+                UnexpectedEOF, Some(self.previous_token.unwrap().position.one_past())
             )),
         }
 
@@ -147,8 +147,8 @@ impl<'a> Parser<'a> {
             self.advance();
             if self.current_token.is_none() {
                 return Err(Error::new(
-                    UnexpectedEOF, 
-                    self.previous_token.unwrap().position.one_past()
+                    UnexpectedEOF,
+                    Some(self.previous_token.unwrap().position.one_past())
                 ));
             }
             match self.current_token.unwrap().kind {
@@ -159,7 +159,7 @@ impl<'a> Parser<'a> {
                 },
                 other_token => return Err(Error::new(
                     UnexpectedToken(other_token),
-                    self.current_token.unwrap().position,
+                    Some(self.current_token.unwrap().position),
                 )),
             }
         }
@@ -204,7 +204,7 @@ impl<'a> Parser<'a> {
                                 // ran out of tokens before closing RParen
                                 return Err(Error::new(
                                     MissingToken(RParen),
-                                    self.previous_token.unwrap().position.one_past(),
+                                    Some(self.previous_token.unwrap().position.one_past()),
                                 ))
                             }
                         };
@@ -230,7 +230,7 @@ impl<'a> Parser<'a> {
                         Some(value) => value,
                         None => return Err(Error::new(
                             UnexpectedToken(token.kind),
-                            token.position
+                            Some(token.position)
                         )),
                     };
 
@@ -297,7 +297,7 @@ impl<'a> Parser<'a> {
             Some(evaluable) => Ok(evaluable),
             None => Err(Error::new(
                 MissingExpression,
-                self.current_token.unwrap().position.one_past()
+                Some(self.current_token.unwrap().position.one_past())
             ))
         }
     }
@@ -333,7 +333,7 @@ impl<'a> Parser<'a> {
                 if indentation == previous_indentation {
                     return Err(Error::new(
                         ConsistentIndentation { previous_indentation },
-                        Position::new(token.position.line, 0, token.position.start)
+                        Some(Position::new(token.position.line, 0, token.position.start))
                     ));
                 } else {
                     previous_indentation = indentation;
@@ -351,7 +351,7 @@ impl<'a> Parser<'a> {
                         Some(token) => token,
                         None => return Err(Error::new(
                             UnexpectedEOF,
-                            self.previous_token.unwrap().position.one_past()
+                            Some(self.previous_token.unwrap().position.one_past())
                         )),
                     };
                     match current_token.kind {
@@ -374,7 +374,7 @@ impl<'a> Parser<'a> {
                         },
                         other_token_kind => return Err(Error::new(
                             UnexpectedToken(other_token_kind),
-                            current_token.position,
+                            Some(current_token.position),
                         )),
                     }
                 },
@@ -474,7 +474,7 @@ impl<'a> Parser<'a> {
                     start_of_line = true;
                 }
                 other_token_kind => return Err(Error::new(
-                    UnexpectedToken(other_token_kind), token.position,
+                    UnexpectedToken(other_token_kind), Some(token.position),
                 )),
             }
         }
@@ -501,13 +501,13 @@ impl<'a> Parser<'a> {
             Some(token) => token,
             None => return Err(Error::new(
                 UnexpectedEOF,
-                self.previous_token.unwrap().position.one_past(),
+                Some(self.previous_token.unwrap().position.one_past()),
             )),
         };
         if token.kind != kind {
             return Err(Error::new(
                 UnexpectedToken(token.kind),
-                token.position,
+                Some(token.position),
             ));
         }
         Ok(token)
@@ -519,7 +519,7 @@ impl<'a> Parser<'a> {
         if opener.len() == token.position.length {
             Err(Error::new(
                 Balance { opener, closer: token.text.to_string() },
-                token.position,
+                Some(token.position),
             ))
         } else {
             Ok(())

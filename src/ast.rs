@@ -277,7 +277,7 @@ impl Evaluable for FunctionCallNode {
                     expected_args: num_params,
                     passed_args: self.args.list.len()
                 },
-                Position::new(0, 0, 0),
+                None,
             ));
         }
 
@@ -491,7 +491,7 @@ impl Executable for ForLoopNode {
 pub struct BreakNode;
 impl Executable for BreakNode {
     fn execute(&self, _runtime: &mut Runtime) -> Result<(), Error> {
-        Err(Error::new(Break, Position::new(0, 0, 0)))
+        Err(Error::new(Break, None))
     }
 
     fn to_statement(self) -> StatementNode {
@@ -504,7 +504,7 @@ impl Executable for BreakNode {
 pub struct ContinueNode;
 impl Executable for ContinueNode {
     fn execute(&self, _runtime: &mut Runtime) -> Result<(), Error> {
-        Err(Error::new(Continue, Position::new(0, 0, 0)))
+        Err(Error::new(Continue, None))
     }
 
     fn to_statement(self) -> StatementNode {
@@ -525,7 +525,7 @@ impl ReturnNode {
 impl Executable for ReturnNode {
     fn execute(&self, runtime: &mut Runtime) -> Result<(), Error> {
         let return_value = self.return_value.evaluate(runtime)?;
-        Err(Error::new(Return(return_value), Position::new(0, 0, 0)))
+        Err(Error::new(Return(return_value), None))
     }
 
     fn to_statement(self) -> StatementNode {

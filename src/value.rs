@@ -261,11 +261,7 @@ impl Value {
                     expected: num_non_escaped_percentage_signs,
                     received: values_to_insert.len(),
                 },
-                Position {
-                    line: 0,
-                    start: 0,
-                    length: 0,
-                }
+                None
             ));
         }
         let mut last_was_not_escape = false;
@@ -307,11 +303,7 @@ impl Value {
                         flag: other.to_string(),
                         specifier_num: num_inserted_so_far + 1,
                     },
-                    Position {
-                        line: 0,
-                        start: 0,
-                        length: 0,
-                    }
+                    None
                 ))
             }
             num_inserted_so_far += 1;

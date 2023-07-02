@@ -40,7 +40,7 @@ pub fn input() -> Result<Value, Error> {
     let mut input = String::new();
     match io::stdin().read_line(&mut input) {
         Ok(_) => Ok(Value::String(input)),
-        Err(_) => Err(Error::new(Input, Position::new(0, 0, 0)))
+        Err(_) => Err(Error::new(Input, None))
     }
 }
 
@@ -54,7 +54,7 @@ pub fn range(runtime: &mut Runtime, args: &ListNode) -> Result<Value, Error> {
                 expected_args: 3, 
                 passed_args: num_args 
             },
-            Position::new(0, 0, 0),
+            None,
         ))
     }
 

@@ -5,11 +5,10 @@ use crate::value::Value;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Error {
     pub kind: ErrorKind,
-    // TODO: replace this with Option<Position>
-    pub pos: Position,
+    pub pos: Option<Position>,
 }
 impl Error {
-    pub fn new(kind: ErrorKind, position: Position) -> Error {
+    pub fn new(kind: ErrorKind, position: Option<Position>) -> Error {
         Error {
             pos: position,
             kind,
