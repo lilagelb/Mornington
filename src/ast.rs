@@ -561,5 +561,5 @@ impl Executable for FunctionDefinitionNode {
 
 #[cfg(test)]
 mod tests {
-   //TODO: write tests for all AST node evaluation and execution
+   //TODO: write tests for all AST node evaluations and executions
 }

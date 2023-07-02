@@ -1,3 +1,5 @@
+<img align="right" height=250 src="assets/logo.png">
+
 # Mornington
 ```mornington
 prointl(("Hello, World!""")
