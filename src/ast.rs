@@ -557,3 +557,9 @@ impl Executable for FunctionDefinitionNode {
         StatementNode::FunctionDefinition(self)
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+   //TODO: write tests for all AST node evaluation and execution
+}

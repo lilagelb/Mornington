@@ -950,8 +950,6 @@ mod tests {
         }
     }
 
-    // TODO: move these tests to ast.rs, as they test execution, and replace with token to AST tests
-    //       that test the parser specifically
     mod parse_expr_tests {
         use crate::runtime::Runtime;
         use super::*;
@@ -968,71 +966,246 @@ mod tests {
 
         #[test]
         fn brackets_take_priority() {
+            // 3 * (2 + 4))
+            let tokens = vec![
+                Token::new(Number, "3", 1, 0, 1),
+                Token::new(Mul, "*", 1, 2, 1),
+                Token::new(LParen, "(", 1, 4, 1),
+                Token::new(Number, "2", 1, 5, 1),
+                Token::new(Plus, "+", 1, 7, 1),
+                Token::new(Number, "4", 1, 9, 1),
+                Token::new(RParen, "))", 1, 10, 2),
+            ];
+            let expected_ast = OperatorNode::new(
+                ConstantNode::new(Value::Number(3.0)).to_expression(),
+                OperatorNode::new(
+                    ConstantNode::new(Value::Number(2.0)).to_expression(),
+                    ConstantNode::new(Value::Number(4.0)).to_expression(),
+                    Operator::Add,
+                ).to_expression(),
+                Operator::Mul,
+            ).to_expression();
             assert_eq!(
-                Value::Number(18.0),
-                evaluate_expression("3 * (2 + 4))"),
-            )
+                expected_ast,
+                Parser::new(tokens).parse_expression().unwrap()
+            );
         }
 
         #[test]
         fn mul_takes_priority_over_plus() {
+            // 3 + 4 * 5
+            let tokens = vec![
+                Token::new(Number, "3", 1, 0, 1),
+                Token::new(Plus, "+", 1, 2, 1),
+                Token::new(Number, "4", 1, 4, 1),
+                Token::new(Mul, "*", 1, 6, 1),
+                Token::new(Number, "5", 1, 8, 1),
+            ];
+            let expected_ast = OperatorNode::new(
+                ConstantNode::new(Value::Number(3.0)).to_expression(),
+                OperatorNode::new(
+                    ConstantNode::new(Value::Number(4.0)).to_expression(),
+                    ConstantNode::new(Value::Number(5.0)).to_expression(),
+                    Operator::Mul,
+                ).to_expression(),
+                Operator::Add,
+            ).to_expression();
             assert_eq!(
-                Value::Number(23.0),
-                evaluate_expression("3 + 4 * 5"),
-            )
+                expected_ast,
+                Parser::new(tokens).parse_expression().unwrap(),
+            );
         }
 
         #[test]
         fn mul_takes_priority_over_minus() {
+            // 3 - 4 * 5
+            let tokens = vec![
+                Token::new(Number, "3", 1, 0, 1),
+                Token::new(Minus, "-", 1, 2, 1),
+                Token::new(Number, "4", 1, 4, 1),
+                Token::new(Mul, "*", 1, 6, 1),
+                Token::new(Number, "5", 1, 8, 1),
+            ];
+            let expected_ast = OperatorNode::new(
+                ConstantNode::new(Value::Number(3.0)).to_expression(),
+                OperatorNode::new(
+                    ConstantNode::new(Value::Number(4.0)).to_expression(),
+                    ConstantNode::new(Value::Number(5.0)).to_expression(),
+                    Operator::Mul,
+                ).to_expression(),
+                Operator::Sub,
+            ).to_expression();
             assert_eq!(
-                Value::Number(-17.0),
-                evaluate_expression("3 - 4 * 5"),
-            )
+                expected_ast,
+                Parser::new(tokens).parse_expression().unwrap(),
+            );
         }
 
         #[test]
         fn div_takes_priority_over_plus() {
+            // 3 + 12 / 4
+            let tokens = vec![
+                Token::new(Number, "3", 1, 0, 1),
+                Token::new(Plus, "+", 1, 2, 1),
+                Token::new(Number, "12", 1, 4, 2),
+                Token::new(Div, "/", 1, 7, 1),
+                Token::new(Number, "4", 1, 9, 1),
+            ];
+            let expected_ast = OperatorNode::new(
+                ConstantNode::new(Value::Number(3.0)).to_expression(),
+                OperatorNode::new(
+                    ConstantNode::new(Value::Number(12.0)).to_expression(),
+                    ConstantNode::new(Value::Number(4.0)).to_expression(),
+                    Operator::Div,
+                ).to_expression(),
+                Operator::Add,
+            ).to_expression();
             assert_eq!(
-                Value::Number(6.0),
-                evaluate_expression("3 + 12 / 4"),
-            )
+                expected_ast,
+                Parser::new(tokens).parse_expression().unwrap(),
+            );
         }
 
         #[test]
         fn div_takes_priority_over_minus() {
+            // 3 - 12 / 4
+            let tokens = vec![
+                Token::new(Number, "3", 1, 0, 1),
+                Token::new(Minus, "-", 1, 2, 1),
+                Token::new(Number, "12", 1, 4, 2),
+                Token::new(Div, "/", 1, 7, 1),
+                Token::new(Number, "4", 1, 9, 1),
+            ];
+            let expected_ast = OperatorNode::new(
+                ConstantNode::new(Value::Number(3.0)).to_expression(),
+                OperatorNode::new(
+                    ConstantNode::new(Value::Number(12.0)).to_expression(),
+                    ConstantNode::new(Value::Number(4.0)).to_expression(),
+                    Operator::Div,
+                ).to_expression(),
+                Operator::Sub,
+            ).to_expression();
             assert_eq!(
-                Value::Number(0.0),
-                evaluate_expression("3 - 12 / 4"),
-            )
+                expected_ast,
+                Parser::new(tokens).parse_expression().unwrap(),
+            );
         }
 
         #[test]
         fn mod_takes_priority_over_plus() {
+            // 3 + 12 % 5
+            let tokens = vec![
+                Token::new(Number, "3", 1, 0, 1),
+                Token::new(Plus, "+", 1, 2, 1),
+                Token::new(Number, "12", 1, 4, 2),
+                Token::new(Mod, "%", 1, 7, 1),
+                Token::new(Number, "5", 1, 9, 1),
+            ];
+            let expected_ast = OperatorNode::new(
+                ConstantNode::new(Value::Number(3.0)).to_expression(),
+                OperatorNode::new(
+                    ConstantNode::new(Value::Number(12.0)).to_expression(),
+                    ConstantNode::new(Value::Number(5.0)).to_expression(),
+                    Operator::Mod,
+                ).to_expression(),
+                Operator::Add,
+            ).to_expression();
             assert_eq!(
-                Value::Number(5.0),
-                evaluate_expression("3 + 12 % 5"),
-            )
+                expected_ast,
+                Parser::new(tokens).parse_expression().unwrap(),
+            );
         }
 
         #[test]
         fn mod_takes_priority_over_minus() {
+            // 3 - 12 % 5
+            let tokens = vec![
+                Token::new(Number, "3", 1, 0, 1),
+                Token::new(Minus, "-", 1, 2, 1),
+                Token::new(Number, "12", 1, 4, 2),
+                Token::new(Mod, "%", 1, 7, 1),
+                Token::new(Number, "5", 1, 9, 1),
+            ];
+            let expected_ast = OperatorNode::new(
+                ConstantNode::new(Value::Number(3.0)).to_expression(),
+                OperatorNode::new(
+                    ConstantNode::new(Value::Number(12.0)).to_expression(),
+                    ConstantNode::new(Value::Number(5.0)).to_expression(),
+                    Operator::Mod,
+                ).to_expression(),
+                Operator::Sub,
+            ).to_expression();
             assert_eq!(
-                Value::Number(1.0),
-                evaluate_expression("3 - 12 % 5"),
-            )
+                expected_ast,
+                Parser::new(tokens).parse_expression().unwrap(),
+            );
         }
 
         #[test]
         fn bidmas_complete() {
+            // 7 - 5 % 2 + 3 * 4 / (2 + 4))
+            let tokens = vec![
+                Token::new(Number, "7", 1, 0, 1),
+                Token::new(Minus, "-", 1, 2, 1),
+                Token::new(Number, "5", 1, 4, 1),
+                Token::new(Mod, "%", 1, 6, 1),
+                Token::new(Number, "2", 1, 8, 1),
+                Token::new(Plus, "+", 1, 10, 1),
+                Token::new(Number, "3", 1, 12, 1),
+                Token::new(Mul, "*", 1, 14, 1),
+                Token::new(Number, "4", 1, 16, 1),
+                Token::new(Div, "/", 1, 18, 1),
+                Token::new(LParen, "(", 1, 20, 1),
+                Token::new(Number, "2", 1, 21, 1),
+                Token::new(Plus, "+", 1, 23, 1),
+                Token::new(Number, "4", 1, 25, 1),
+                Token::new(RParen, "))", 1, 26, 2),
+            ];
+            // expected tree:
+            //           +
+            //   ┌───────┴───────┐
+            // ┌─-───┐       ┌───/────┐
+            // 7   ┌─%─┐   ┌─*─┐    ┌─+─┐
+            //     5   2   3   4    2   4
+            let expected_ast = OperatorNode::new(
+                OperatorNode::new(
+                    ConstantNode::new(Value::Number(7.0)).to_expression(),
+                    OperatorNode::new(
+                        ConstantNode::new(Value::Number(5.0)).to_expression(),
+                        ConstantNode::new(Value::Number(2.0)).to_expression(),
+                        Operator::Mod,
+                    ).to_expression(),
+                    Operator::Sub,
+                ).to_expression(),
+                OperatorNode::new(
+                    OperatorNode::new(
+                        ConstantNode::new(Value::Number(3.0)).to_expression(),
+                        ConstantNode::new(Value::Number(4.0)).to_expression(),
+                        Operator::Mul,
+                    ).to_expression(),
+                    OperatorNode::new(
+                        ConstantNode::new(Value::Number(2.0)).to_expression(),
+                        ConstantNode::new(Value::Number(4.0)).to_expression(),
+                        Operator::Add,
+                    ).to_expression(),
+                    Operator::Div,
+                ).to_expression(),
+                Operator::Add,
+            ).to_expression();
             assert_eq!(
-                Value::Number(8.0),
-                evaluate_expression("7 - 5 % 2 + 3 * 4 / (2 + 4))"),
+                expected_ast,
+                Parser::new(tokens).parse_expression().unwrap(),
             )
         }
 
         #[test]
         fn balanced_parentheses_throw_error() {
-            let result = Parser::new(Lexer::new("(1)").lex().unwrap().clone()).parse_expr(0);
+            let tokens = vec![
+                Token::new(LParen, "(", 1, 0, 1),
+                Token::new(Number, "1", 1, 1, 1),
+                Token::new(RParen, ")", 1, 2, 1),
+            ];
+            let result = Parser::new(tokens).parse_expression();
             match result {
                 Ok(_) => panic!("Expected Balance error, got Ok()"),
                 Err(Error { kind: Balance { opener, closer }, ..}) => {
@@ -1045,30 +1218,70 @@ mod tests {
 
         #[test]
         fn single_variable_parsing() {
-            let mut runtime = Runtime::new();
-            runtime.set_variable("a", Value::Number(1.0));
+            let tokens = vec![
+                Token::new(TokenKind::Name, "a", 1, 0, 1),
+            ];
+            let expected_ast = VariableNode::new("a".to_string()).to_expression();
             assert_eq!(
-                Value::Number(1.0),
-                evaluate_expression_with_runtime(
-                    "a",
-                    &mut runtime,
-                ),
+                expected_ast,
+                Parser::new(tokens).parse_expression().unwrap(),
             );
         }
 
         #[test]
         fn bidmas_complete_with_variables() {
-            let mut runtime = Runtime::new();
-            runtime.set_variable("seven", Value::Number(7.0));
-            runtime.set_variable("five", Value::Number(5.0));
-            runtime.set_variable("three", Value::Number(3.0));
-            runtime.set_variable("four", Value::Number(4.0));
+            // seven - five % 2 + three * four / (2 + four))
+            let tokens = vec![
+                Token::new(TokenKind::Name, "seven", 1, 0, 5),
+                Token::new(Minus, "-", 1, 6, 1),
+                Token::new(TokenKind::Name, "five", 1, 8, 4),
+                Token::new(Mod, "%", 1, 13, 1),
+                Token::new(Number, "2", 1, 15, 1),
+                Token::new(Plus, "+", 1, 17, 1),
+                Token::new(TokenKind::Name, "three", 1, 19, 5),
+                Token::new(Mul, "*", 1, 25, 1),
+                Token::new(TokenKind::Name, "four", 1, 27, 4),
+                Token::new(Div, "/", 1, 32, 1),
+                Token::new(LParen, "(", 1, 34, 1),
+                Token::new(Number, "2", 1, 35, 1),
+                Token::new(Plus, "+", 1, 37, 1),
+                Token::new(TokenKind::Name, "four", 39, 25, 4),
+                Token::new(RParen, "))", 1, 43, 2),
+            ];
+            // expected tree:
+            //               +
+            //       ┌───────┴──────────┐
+            //   ┌───-───┐          ┌───/─────┐
+            // seven   ┌─%─┐     ┌──*──┐    ┌─+─┐
+            //       five  2   three  four  2  four
+            let expected_ast = OperatorNode::new(
+                OperatorNode::new(
+                    VariableNode::new("seven".to_string()).to_expression(),
+                    OperatorNode::new(
+                        VariableNode::new("five".to_string()).to_expression(),
+                        ConstantNode::new(Value::Number(2.0)).to_expression(),
+                        Operator::Mod,
+                    ).to_expression(),
+                    Operator::Sub,
+                ).to_expression(),
+                OperatorNode::new(
+                    OperatorNode::new(
+                        VariableNode::new("three".to_string()).to_expression(),
+                        VariableNode::new("four".to_string()).to_expression(),
+                        Operator::Mul,
+                    ).to_expression(),
+                    OperatorNode::new(
+                        ConstantNode::new(Value::Number(2.0)).to_expression(),
+                        VariableNode::new("four".to_string()).to_expression(),
+                        Operator::Add,
+                    ).to_expression(),
+                    Operator::Div,
+                ).to_expression(),
+                Operator::Add,
+            ).to_expression();
             assert_eq!(
-                Value::Number(8.0),
-                evaluate_expression_with_runtime(
-                    "seven - five % 2 + three * four / (2 + four))",
-                    &mut runtime,
-                ),
+                expected_ast,
+                Parser::new(tokens).parse_expression().unwrap(),
             )
         }
     }
